@@ -1,0 +1,10 @@
+/.idea
+/.phalcon
+/.settings
+/.vscode
+/.buildpath
+/.projec
+/vendor
+/nbproject
+/composer.lock
+**/.DS_Store
