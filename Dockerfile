@@ -21,6 +21,15 @@ RUN curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor -o /usr/
 # dependensi
 RUN apt-get -y update && \
     apt-get install -y \
+    patch \
+    libargon2-dev \
+    libcurl4-openssl-dev \
+    libreadline-dev \
+    libsodium-dev \
+    libsqlite3-dev \
+    libssl-dev \
+    libxml2-dev \
+    zlib1g-dev \
     libfreetype6-dev \
     libjpeg62-turbo-dev \
     libzip-dev \
@@ -30,11 +39,59 @@ RUN apt-get -y update && \
     gnupg \
     gnupg2 \
     gnupg1 \
-    git
+    git \
+    libbz2-dev \
+    libgmp-dev
+
+# Recompile PHP 7.3 with CVE-2026-109618 and CVE-2026-109619 security patch
+COPY patches/php-7.3-CVE-2026-109618-109619.patch /tmp/
+RUN set -eux; \
+    docker-php-source extract; \
+    cd /usr/src/php; \
+    patch -p1 < /tmp/php-7.3-CVE-2026-109618-109619.patch; \
+    gnuArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)"; \
+    debMultiarch="$(dpkg-architecture --query DEB_BUILD_MULTIARCH)"; \
+    if [ ! -d /usr/include/curl ]; then \
+        ln -sfT "/usr/include/$debMultiarch/curl" /usr/local/include/curl; \
+    fi; \
+    ./configure \
+        --build="$gnuArch" \
+        --sysconfdir="${PHP_INI_DIR%/php}" \
+        --with-config-file-path="$PHP_INI_DIR" \
+        --with-config-file-scan-dir="$PHP_INI_DIR/conf.d" \
+        --enable-option-checking=fatal \
+        --with-mhash \
+        --with-pic \
+        --enable-ftp \
+        --enable-mbstring \
+        --enable-mysqlnd \
+        --with-password-argon2 \
+        --with-sodium=shared \
+        --with-pdo-sqlite=/usr \
+        --with-sqlite3=/usr \
+        --with-curl \
+        --with-iconv \
+        --with-openssl \
+        --with-readline \
+        --with-zlib \
+        --disable-phpdbg \
+        --with-libdir="lib/$debMultiarch" \
+        --disable-cgi \
+        --enable-fpm \
+        --with-fpm-user=www-data \
+        --with-fpm-group=www-data \
+    ; \
+    make -j "$(nproc)"; \
+    find -type f -name '*.a' -delete; \
+    make install; \
+    make clean; \
+    cd /; \
+    docker-php-source delete; \
+    rm -f /tmp/php-7.3-CVE-2026-109618-109619.patch
 
 # php ext 
 RUN docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ && \
-    docker-php-ext-install zip mysqli pdo_mysql pdo_pgsql gd && \
+    docker-php-ext-install zip mysqli pdo_mysql pdo_pgsql gd bcmath && \
     rm -rf /var/lib/apt/lists/*
 
 # phalcon
